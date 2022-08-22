@@ -1,71 +1,142 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class HttpManager : MonoBehaviour
 {
+    [SerializeField] private string URL;
+    private string Token;
+    private string Username;
 
-    [SerializeField]
-    private string URL;
-    [SerializeField]
-    private Text[] texts;
-    [SerializeField]
-    private GameObject peekaboo;
-    public void ClickGetScores()
+    private void Start()
     {
-        StartCoroutine(GetScores());
+        Token = PlayerPrefs.GetString("token");
+        Username = PlayerPrefs.GetString("username");
+        Debug.Log("TOKEN: " + Token);
+
+        StartCoroutine(GetPerfil());
+    }
+    public void ClickSignUp()
+    {
+        string postData = GetInputData();
+        StartCoroutine(SignUp(postData));
+    }
+    public void ClickLogIn()
+    {
+        string postData = GetInputData();
+        StartCoroutine(LogIn(postData));
+    }
+    private string GetInputData()
+    {
+        AuthData data = new AuthData();
+        data.username = GameObject.Find("InputFieldUsername").GetComponent<InputField>().text;
+        data.password = GameObject.Find("InputFieldPassword").GetComponent<InputField>().text;
+        string postData = JsonUtility.ToJson(data);
+        return postData;
     }
 
-    IEnumerator GetScores()
+    IEnumerator SignUp(string postData)
     {
-        string url = URL + "/leaders";
-        UnityWebRequest www = UnityWebRequest.Get(url);
+        Debug.Log("SIGN UP: " + postData);
+
+        string url = URL + "/api/usuarios";
+        UnityWebRequest www = UnityWebRequest.Put(url, postData);
+        www.method = "POST";
+        www.SetRequestHeader("content-type", "application/json");
 
         yield return www.SendWebRequest();
-        peekaboo.SetActive(true);
+
         if (www.isNetworkError)
         {
             Debug.Log("NETWORK ERROR " + www.error);
         }
-        else if(www.responseCode == 200){
-            //Debug.Log(www.downloadHandler.text);
-            Scores resData = JsonUtility.FromJson<Scores>(www.downloadHandler.text);
-            int i = 0;
-            foreach (ScoreData score in resData.scores)
-            {
-                texts[i].text = score.name + " | " + score.value;
-                Debug.Log(score.name +" | "+score.value);
-                i++;
-            }
+        else if (www.responseCode == 200)
+        {
+            AuthData resData = JsonUtility.FromJson<AuthData>(www.downloadHandler.text);
+            Debug.Log("Registrado " + resData.usuario.username + ", id: " + resData.usuario._id);
+            StartCoroutine(LogIn(postData));
         }
         else
         {
             Debug.Log(www.error);
+            Debug.Log(www.downloadHandler.text);
         }
     }
-
-   public void OnClickOcultar()
+    IEnumerator LogIn(string postData)
     {
-        peekaboo?.SetActive(false);
+        Debug.Log("LOG IN: " + postData);
+
+        string url = URL + "/api/auth/login";
+        UnityWebRequest www = UnityWebRequest.Put(url, postData);
+        www.method = "POST";
+        www.SetRequestHeader("content-type", "application/json");
+
+        yield return www.SendWebRequest();
+        if (www.isNetworkError)
+        {
+            Debug.Log("NETWORK ERROR " + www.error);
+        }
+        else if (www.responseCode == 200)
+        {
+            AuthData resData = JsonUtility.FromJson<AuthData>(www.downloadHandler.text);
+
+            Debug.Log("Auntenticado " + resData.usuario.username + ", id: " + resData.usuario._id);
+            Debug.Log("TOKEN: " + resData.token);
+
+            PlayerPrefs.SetString("token", resData.token);
+            PlayerPrefs.SetString("username", resData.usuario.username);
+
+            SceneManager.LoadScene("Game");
+        }
+        else
+        {
+            Debug.Log(www.error);
+            Debug.Log(www.downloadHandler.text);
+        }
+    }
+    IEnumerator GetPerfil()
+    {
+        string url = URL + "/api/usuarios/" + Username;
+        UnityWebRequest www = UnityWebRequest.Get(url);
+        www.SetRequestHeader("x-token", Token);
+
+        yield return www.SendWebRequest();
+
+        if (www.isNetworkError)
+        {
+            Debug.Log("NETWORK ERROR " + www.error);
+        }
+        else if (www.responseCode == 200)
+        {
+            AuthData resData = JsonUtility.FromJson<AuthData>(www.downloadHandler.text);
+            Debug.Log("Token valido " + resData.usuario.username + ", id:" + resData.usuario._id + "Score: " + resData.usuario.score);
+            SceneManager.LoadScene("Game");
+        }
+        else
+        {
+            Debug.Log(www.error);
+            Debug.Log(www.downloadHandler.text);
+        }
     }
 }
 
-
-[System.Serializable]
-public class ScoreData
+[Serializable]
+public class AuthData
 {
-    public string name;
-    public int userId;
-    public int value;
-
+    public string username;
+    public string password;
+    public UserData usuario;
+    public string token;
 }
-
-
-[System.Serializable]
-public class Scores
+[Serializable]
+public class UserData
 {
-    public ScoreData[] scores;
+    public string _id;
+    public string username;
+    public bool estado;
+    public int score;
 }
-
